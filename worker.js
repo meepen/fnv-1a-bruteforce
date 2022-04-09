@@ -29,7 +29,7 @@ while (1) {
 		// hash
 		let nextHash = ((currentHash ^ characterList[0]) * 0x01000193n) & 0xFFFFFFFFn;
 		if (targetHashes.indexOf(nextHash) !== -1) {
-			process.send(String.fromCharCode(...[...characterList].reverse().slice(1).map(Number)));
+			process.send(String.fromCharCode(...[...characterList].slice(0, -1).reverse().map(Number)));
 		}
 
 		let i;

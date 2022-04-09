@@ -58,12 +58,12 @@ export default class Workers extends EventEmitter {
 		this.workers = (new Array(workerCount)).fill(1).map(x => new Worker());
 	}
 
-	*jobs(maxCharacters) {
+	*jobs(maxCharacters, startHash = 0x811c9dc5n) {
 		// first do the pairs of characters that don't have the full thing
 		for (let characterCount = 1; characterCount <= Math.min(maxCharacters, MaxCharacterWorkload); characterCount++) {
 			yield {
 				characterCount: characterCount,
-				startHash: 0x811c9dc5n,
+				startHash,
 				startCharacters: ""
 			};
 		}
@@ -73,21 +73,23 @@ export default class Workers extends EventEmitter {
 		}
 
 		for (let characterCount = MaxCharacterWorkload; characterCount < maxCharacters; characterCount++) {
-			let current = (new Array(characterCount - MaxCharacterWorkload + 1)).fill(a);
+			let currentCharacters = (new Array(characterCount - MaxCharacterWorkload + 1)).fill(a);
 			let remaining = 1n;
-			for (let i = 0; i < current.length; i++) {
+			for (let i = 0; i < currentCharacters.length; i++) {
 				remaining *= 26n;
 			}
 			
 			while (remaining--) {
-				let startCharacters = String.fromCharCode(...current.reverse());
+				let startCharacters = String.fromCharCode(...currentCharacters.slice().reverse());
 				yield {
 					characterCount: MaxCharacterWorkload,
-					startHash: hash(startCharacters),
+					startHash: hash(startCharacters, startHash),
 					startCharacters
 				};
 
-				for (let i = 0; current[i]++ === z; i++) { }
+				for (let i = 0; ++currentCharacters[i] > z; i++) {
+					currentCharacters[i] = a;
+				}
 			}
 		}
 	}
@@ -109,8 +111,8 @@ export default class Workers extends EventEmitter {
 		});
 	}
 
-	async search(targets, maxCharacters = 8) {
-		this.generator = this.jobs(maxCharacters);
+	async search(targets, maxCharacters = 8, startHash) {
+		this.generator = this.jobs(maxCharacters, startHash);
 		this.targetHashes = targets;
 		this.results = [];
 
@@ -122,8 +124,19 @@ export default class Workers extends EventEmitter {
 		}
 
 		await Promise.all(this.workers.map(x => x.promise));
+		
+		let ret = {};
 
-		return this.results.sort();
+		for (let result of this.results) {
+			let hashResult = hash(result, startHash);
+			if (!(hashResult in ret)) {
+				ret[hashResult] = [];
+			}
+
+			ret[hashResult].push(result);
+		}
+
+		return ret;
 	}
 
 	close() {
